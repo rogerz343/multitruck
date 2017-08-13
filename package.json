@@ -1,0 +1,11 @@
+{
+    "name": "MultiTruck",
+    "private": "true",
+    "version": "1.0.0",
+    "description": "server for multitruck",
+    "main": "server.js",
+    "dependencies": {
+        "socket.io": "^2.0.3",
+        "express": "^4.15.4"
+    }
+}
