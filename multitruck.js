@@ -5,8 +5,8 @@ const TICK_INTERVAL = 1000 / TICKRATE;
 const INITIAL_POS = Cesium.Cartesian3.fromDegrees(-77.413404, 43.203573);
 const INITIAL_ORIENT = Cesium.Transforms.headingPitchRollQuaternion(INITIAL_POS,
     new Cesium.HeadingPitchRoll(0, 0, 0));
-const FORWARD_ACCEL = 1;
-const BACKWARD_ACCEL = 1;
+const FORWARD_ACCEL = 50;
+const BACKWARD_ACCEL = 80;
 const MAX_FORWARD_SPEED = 100;
 const MAX_REVERSE_SPEED = 40;
 const GRAVITY = 9.8;
@@ -56,12 +56,10 @@ class Truck {
 
         let pos0 = entity.position._value;
         let pos0Carto = Cesium.Cartographic.fromCartesian(pos0);
-        let height = pos0Carto.height;
         let groundHeight = viewer.scene.globe.getHeight(pos0Carto);
-        let vel0 = this.vel;
-        let speed = Cesium.Cartesian3.magnitude(vel0);
+        let speed = Cesium.Cartesian3.magnitude(this.vel);
 
-        let isAirborne = height - groundHeight > 0.1;
+        let isAirborne = pos0Carto.height - groundHeight > 0.3;
         let orientationMatrix = Cesium.Matrix3.fromQuaternion(entity.orientation._value);
         let forwardDir = Cesium.Matrix3.getColumn(orientationMatrix, 0, new Cesium.Cartesian3());
         let leftDir = Cesium.Matrix3.getColumn(orientationMatrix, 1, new Cesium.Cartesian3());
@@ -85,7 +83,7 @@ class Truck {
             } else if (speed < SPEED_MIN_TURN) {
                 turnSpeed = TURN_SPEED_MIN + (TURN_SPEED_MAX - TURN_SPEED_MIN) * (SPEED_MIN_TURN - speed) / (SPEED_MIN_TURN - SPEED_MAX_TURN);
             } else {
-                turnSpeed = TURN_SPPED_MIN;
+                turnSpeed = TURN_SPEED_MIN;
             }
             if (truck.left) {
                 steerAngle = turnSpeed * dt * Math.PI / 180;
@@ -124,6 +122,23 @@ class Truck {
         }
 
         // air resistance
+        speed = Cesium.Cartesian3.magnitude(this.vel);
+        if (speed > 0.01) {
+            let velDir = Cesium.Cartesian3.normalize(this.vel, new Cesium.Cartesian3());
+            let DRAG_FACTOR = 0.00090;
+            let drag = speed * speed * DRAG_FACTOR;
+
+            // extra constant drag to make sure truck eventually stops
+            let CONSTANT_DRAG = 2.0;
+            drag += CONSTANT_DRAG;
+
+            if (drag > speed) {
+                drag = speed;
+            }
+
+            let dragVector = Cesium.Cartesian3.multiplyByScalar(velDir, drag * dt, new Cesium.Cartesian3());
+            Cesium.Cartesian3.subtract(this.vel, dragVector, this.vel);
+        }
 
         // gravity
         let gravNormal = viewer.scene.globe.ellipsoid.geodeticSurfaceNormal(pos0);
@@ -132,7 +147,7 @@ class Truck {
 
         // move truck after velocity vector is completely calculated
         let deltaPos = Cesium.Cartesian3.multiplyByScalar(this.vel, dt, new Cesium.Cartesian3());
-        let pos1 = Cesium.Cartesian3.add(deltaPos, pos0, new Cesium.Cartesian3());
+        let pos1 = Cesium.Cartesian3.add(pos0, deltaPos, new Cesium.Cartesian3());
 
         // check that we're not underground
         let pos1Carto = Cesium.Cartographic.fromCartesian(pos1);
@@ -170,8 +185,12 @@ class Truck {
             upDir = Cesium.Matrix3.getColumn(orientationMatrix, 2, new Cesium.Cartesian3());
         }
 
-        // viewer.scene.camera.lookAt(truck.entity.position._value,
-        //     new Cesium.HeadingPitchRange(Math.PI / 2, -0.1, 50));
+        entity.orientation = Cesium.Quaternion.fromRotationMatrix(orientationMatrix);
+        
+        // camera
+        let hpr = Cesium.HeadingPitchRoll.fromQuaternion(entity.orientation._value);
+        viewer.scene.camera.lookAt(truck.entity.position._value,
+            new Cesium.HeadingPitchRange(hpr.heading + Math.PI / 2, -0.1, 50));
 
     }
 }
