@@ -1,3 +1,9 @@
+/**
+ * Client-side driving code for MultiTruck.
+ * Credits: physics/driving mechanics adapted from: https://github.com/AnalyticalGraphicsInc/cesium-google-earth-examples
+ *          my orthonomral frame for the truck might be rotated 90 degrees relative to AGI's milktruck app's code
+ */
+
 const TRUCK_MODEL_URL = "model/truck.gltf";
 const TICKRATE = 60;
 const TICK_INTERVAL = 1000 / TICKRATE;
@@ -67,7 +73,7 @@ class Truck {
 
         let steerAngle = 0;
 
-        // steering
+        // steering: degrade turning at higher speeds
         if (this.left || this.right) {
             let TURN_SPEED_MIN = 60;        // radian/sec
             let TURN_SPEED_MAX = 100;       // radian/sec
@@ -103,12 +109,13 @@ class Truck {
         // calculate forward speed
         let forwardSpeed = 0;
         if (!isAirborne) {
-            // if slipping, transfer some of the slip velocity into forward velocity
-            let slipMagnitude = Cesium.Cartesian3.dot(this.vel, forwardDir);
+            // if slipping sideways, transfer some of the slip velocity into forward velocity
+            let slipMagnitude = Cesium.Cartesian3.dot(this.vel, leftDir);
             let c0 = Math.exp(-dt / 0.5);
-            let slipVector = Cesium.Cartesian3.multiplyByScalar(forwardDir, slipMagnitude * (1 - c0), new Cesium.Cartesian3());
+            let slipVector = Cesium.Cartesian3.multiplyByScalar(leftDir, slipMagnitude * (1 - c0), new Cesium.Cartesian3());
             Cesium.Cartesian3.subtract(this.vel, slipVector, this.vel);
 
+            // accelerate forwards
             forwardSpeed = Cesium.Cartesian3.dot(forwardDir, this.vel);
             if (truck.forward) {
                 let accelAmount = Cesium.Cartesian3.multiplyByScalar(forwardDir, FORWARD_ACCEL * dt, new Cesium.Cartesian3());
