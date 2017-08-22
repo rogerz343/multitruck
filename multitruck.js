@@ -48,6 +48,7 @@ viewer.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEF
  */
 class Truck {
     constructor(truckEntity) {
+        this.health = 100;
         this.entity = truckEntity;
         this.vel = new Cesium.Cartesian3();
         this.forward = false;
@@ -56,7 +57,7 @@ class Truck {
         this.right = false;
     }
 
-    onTick() {
+    driveTick() {
         let dt = 1 / TICKRATE;
         let entity = this.entity;
 
@@ -194,21 +195,14 @@ class Truck {
 
         entity.orientation = Cesium.Quaternion.fromRotationMatrix(orientationMatrix);
         
-        // camera
-        let hpr = Cesium.HeadingPitchRoll.fromQuaternion(entity.orientation._value);
-        viewer.scene.camera.lookAt(truck.entity.position._value,
-            new Cesium.HeadingPitchRange(hpr.heading + Math.PI / 2, -0.1, 50));
-
+        this.cameraTick();
     }
-}
 
-/**
- * Calculates how fast the truck should be able to steer, depending on its speed
- * @param {Number} speed the magnitude of the velocity of the car
- * @returns {Number} the speed that the car can turn at
- */
-function steeringSpeed(speed) {
-    return 5;
+    cameraTick() {
+        let hpr = Cesium.HeadingPitchRoll.fromQuaternion(this.entity.orientation._value);
+        viewer.scene.camera.lookAt(this.entity.position._value,
+            new Cesium.HeadingPitchRange(hpr.heading + Math.PI / 2, -0.1, 50));
+    }
 }
 
 /**
@@ -257,7 +251,7 @@ function estimateGroundNormal(pos) {
 }
 
 function tick() {
-    truck.onTick();
+    truck.driveTick();
 }
 
 function frame(timestamp) {
@@ -296,6 +290,8 @@ $(document).keyup((e) => {
     }
 });
 
+/* Start Program */
+
 let truckEntity = viewer.entities.add({
     name: "truck",
     model: {
@@ -311,3 +307,46 @@ let truck = new Truck(truckEntity);
 let deltaT = 0;
 let start = window.performance.now();
 requestAnimationFrame(frame);
+
+/* Client-Server Communication */
+
+let CLIENT_ENTITIES = {};              // map from player's id to an actual entity
+
+let userId = ~~(Math.random() * 1000000000);   // userId is just a random number (for now)
+let socket = io();
+
+socket.on("serverRequestsClientData", () => {
+    socket.emit("serverReceivesClientData",
+        userId,
+        truck.entity.position._value,
+        truck.entity.orientation._value,
+        truck.health);
+});
+
+socket.on("serverEmitsData", (PLAYERS_IN_SERVER) => {
+    for (let playerId in PLAYERS_IN_SERVER) {
+        if (playerId == userId) { continue; }
+        if (CLIENT_ENTITIES[playerId]) {
+            CLIENT_ENTITIES[playerId].position = PLAYERS_IN_SERVER[playerId].pos;
+            CLIENT_ENTITIES[playerId].orientation = PLAYERS_IN_SERVER[playerId].orientation;
+        } else {
+            CLIENT_ENTITIES[playerId] = viewer.entities.add({
+                name: "truck",
+                model: {
+                    uri: TRUCK_MODEL_URL,
+                    scale: 1,
+                    runAnimations: false
+                },
+                position: PLAYERS_IN_SERVER[playerId].pos,
+                orientation: PLAYERS_IN_SERVER[playerId].orientation
+            });
+        }
+    }
+});
+
+socket.emit("playerConnect",
+    userId,
+    truck.entity.position._value,
+    truck.entity.orientation._value,
+    truck.health);
+    
