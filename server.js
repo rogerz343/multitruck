@@ -19,6 +19,10 @@ http.listen(PORT, () => {
 
 /* Program Starts Here */
 
+const PROJECTILE_SPEED = 10;
+let Cesium = require("cesium");
+
+
 /**
  * We don't actually store truck entities in the Player class to minimize the
  * (redundant) data we send over a network.
@@ -62,16 +66,17 @@ function updateProjectiles() {
     for (let projId in PROJECTILES) {
         let projectile = PROJECTILES[projId];
         projectile.entityTick();
-        if (Cesium.Cartesian3.distance(projectile.pos, projectile.initialPos) > 1000) {
+        if (Cesium.Cartesian3.distance(projectile.pos, projectile.initialPos) > 100000000) {
+            console.log("deleted");
             delete PROJECTILES[projId];
         } else {
             for (let playerId in PLAYERS_IN_SERVER) {
                 let player = PLAYERS_IN_SERVER[playerId];
-                if (Cesium.Cartesian3.distance(projectile.pos, player.pos) < 0.5) {
-                    player.health -= 10;
-                    delete PROJECTILES[projId];
-                    break;
-                }
+                // if (Cesium.Cartesian3.distance(projectile.pos, player.pos) < 0.5) {
+                //     player.health -= 10;
+                //     delete PROJECTILES[projId];
+                //     break;
+                // }
             }
         }
     }
@@ -87,6 +92,7 @@ let PLAYERS_IN_SERVER = {};
 let PROJECTILES = {};
 
 let projectileCount = 0;
+let dt = 1 / 60;
 
 io.on("connection", (socket) => {
     console.log("+ connection @ " + socket.request.connection.remoteAddress);
@@ -111,15 +117,10 @@ io.on("connection", (socket) => {
     });
 
     socket.on("addNewProjectile", (pos, vel) => {
+        Cesium.Cartesian3.multiplyByScalar(vel, PROJECTILE_SPEED, vel);
         PROJECTILES[projectileCount] = new Projectile(projectileCount, pos, vel);
         projectileCount++;
     });
-
-    // function serverRequestDataTick() {
-    //     socket.emit("serverRequestsClientData");
-    //     setTimeout(serverRequestDataTick, 16.6);
-    // }
-    // serverRequestDataTick();
     
     function serverTick() {
         // update projectiles

@@ -267,8 +267,11 @@ function tick() {
 }
 
 function fireProjectile() {
+    // bullet should fire from middle of truck (about 1.5 meters off the ground);
+    let posCarto = Cesium.Cartographic.fromCartesian(truck.entity.position._value);
+    let pos = Cesium.Cartesian3.fromRadians(posCarto.longitude, posCarto.latitude, posCarto.height + 1.5);
     let forwardDir = Cesium.Matrix3.getColumn(Cesium.Matrix3.fromQuaternion(truck.entity.orientation._value), 0, new Cesium.Cartesian3());
-    socket.emit("addNewProjectile", truck.entity.position._value, forwardDir);
+    socket.emit("addNewProjectile", pos, forwardDir);
 }
 
 function frame(timestamp) {
@@ -381,7 +384,8 @@ socket.on("serverEmitsData", (PLAYERS_IN_SERVER, PROJECTILES) => {
                     scale: 1,
                     runAnimations: false
                 },
-                position: CLIENT_PROJECTILE_ENTITIES[projId].pos
+                position: PROJECTILES[projId].pos,
+                orientation: INITIAL_ORIENT
             });
         }
     }

@@ -6,6 +6,7 @@
     "main": "server.js",
     "dependencies": {
         "socket.io": "^2.0.3",
-        "express": "^4.15.4"
+        "express": "^4.15.4",
+        "cesium": "^1.36.0"
     }
 }
