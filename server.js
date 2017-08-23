@@ -35,12 +35,58 @@ class Player {
 }
 
 /**
+ * general projectile class
+ * assumes symmetry (i.e. round bullets, not missiles)
+ * Projectiles on client-side are only to show clients where they are. Actual collision
+ * detection is done server-side.
+ */
+class Projectile {
+    constructor(projectileId, position, velocity) {
+        this.id = projectileId;
+        this.initialPos = position;
+        this.pos = position;
+        this.vel = velocity;
+    }
+
+    entityTick() {
+        let deltaPos = Cesium.Cartesian3.multiplyByScalar(this.vel, dt, new Cesium.Cartesian3());
+        Cesium.Cartesian3.add(this.pos, deltaPos, this.pos);
+    }
+}
+
+/**
+ * updates the location of every projectile and checks for collisions
+ * runtime is O(n^2) for collision detection
+ */
+function updateProjectiles() {
+    for (let projId in PROJECTILES) {
+        let projectile = PROJECTILES[projId];
+        projectile.entityTick();
+        if (Cesium.Cartesian3.distance(projectile.pos, projectile.initialPos) > 1000) {
+            delete PROJECTILES[projId];
+        } else {
+            for (let playerId in PLAYERS_IN_SERVER) {
+                let player = PLAYERS_IN_SERVER[playerId];
+                if (Cesium.Cartesian3.distance(projectile.pos, player.pos) < 0.5) {
+                    player.health -= 10;
+                    delete PROJECTILES[projId];
+                    break;
+                }
+            }
+        }
+    }
+}
+
+/**
  * Current server model:
  * Every tick, the server requests data from every client.
  * A separate tick sends data back to clients.
  */
 
 let PLAYERS_IN_SERVER = {};
+let PROJECTILES = {};
+
+let projectileCount = 0;
 
 io.on("connection", (socket) => {
     console.log("+ connection @ " + socket.request.connection.remoteAddress);
@@ -48,7 +94,6 @@ io.on("connection", (socket) => {
     socket.on("playerConnect", (userId, position, orientation, health) => {
         let newPlayer = new Player(userId, position, orientation, health);
         PLAYERS_IN_SERVER[userId] = newPlayer;
-        console.log(PLAYERS_IN_SERVER);
     });
 
     // TODO: fix disconnecting
@@ -57,21 +102,32 @@ io.on("connection", (socket) => {
     //     delete PLAYERS_IN_SERVER[userId];
     // });
 
-    socket.on("serverReceivesClientData", (userId, position, orientation, health) => {
+    socket.on("serverReceivesClientData", (userId, position, orientation) => {
         let player = PLAYERS_IN_SERVER[userId];
-        player["pos"] = position;
-        player["orientation"] = orientation;
+        if (player) {
+            player["pos"] = position;
+            player["orientation"] = orientation;
+        }
     });
 
-    function serverRequestDataTick() {
-        socket.emit("serverRequestsClientData");
-        setTimeout(serverRequestDataTick, 16.6);
-    }
-    serverRequestDataTick();
+    socket.on("addNewProjectile", (pos, vel) => {
+        PROJECTILES[projectileCount] = new Projectile(projectileCount, pos, vel);
+        projectileCount++;
+    });
+
+    // function serverRequestDataTick() {
+    //     socket.emit("serverRequestsClientData");
+    //     setTimeout(serverRequestDataTick, 16.6);
+    // }
+    // serverRequestDataTick();
     
-    function serverGlobalEmitData() {
-        socket.emit("serverEmitsData", PLAYERS_IN_SERVER);
-        setTimeout(serverGlobalEmitData, 16.6);
+    function serverTick() {
+        // update projectiles
+        updateProjectiles();
+
+        // emit data
+        socket.emit("serverEmitsData", PLAYERS_IN_SERVER, PROJECTILES);
+        setTimeout(serverTick, 16.6);
     }
-    serverGlobalEmitData();
+    serverTick();
 });

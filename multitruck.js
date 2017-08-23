@@ -5,6 +5,7 @@
  */
 
 const TRUCK_MODEL_URL = "model/truck.gltf";
+const PROJECTILE_MODEL_URL = "resources/box/box.gltf";
 const TICKRATE = 60;
 const TICK_INTERVAL = 1000 / TICKRATE;
 
@@ -16,6 +17,8 @@ const BACKWARD_ACCEL = 80;
 const MAX_FORWARD_SPEED = 100;
 const MAX_REVERSE_SPEED = 40;
 const GRAVITY = 9.8;
+
+const PROJECTILE_SPEED = 50;
 
 // leaving out next line will result in console warning
 Cesium.BingMapsApi.defaultKey = 'P9gVFeINebTgcj5ONynB~sa3kfugY4uM70j48aMFH-g~Ai2zw5GpzAt7hLyv87kHTaDy9dhktuwKhkBi8HyCOoaU5f1VrSm9-Ps4QEJQRuH8';
@@ -58,7 +61,6 @@ class Truck {
     }
 
     driveTick() {
-        let dt = 1 / TICKRATE;
         let entity = this.entity;
 
         let pos0 = entity.position._value;
@@ -250,8 +252,23 @@ function estimateGroundNormal(pos) {
     return normal;
 }
 
+function updateHealthBar() {
+    $("#health-remaining").attr("width", (truck.health * 2));
+}
+
 function tick() {
     truck.driveTick();
+    updateHealthBar();
+    socket.emit("serverReceivesClientData",
+        userId,
+        truck.entity.position._value,
+        truck.entity.orientation._value,
+        truck.health);
+}
+
+function fireProjectile() {
+    let forwardDir = Cesium.Matrix3.getColumn(Cesium.Matrix3.fromQuaternion(truck.entity.orientation._value), 0, new Cesium.Cartesian3());
+    socket.emit("addNewProjectile", truck.entity.position._value, forwardDir);
 }
 
 function frame(timestamp) {
@@ -264,6 +281,7 @@ function frame(timestamp) {
     requestAnimationFrame(frame);
 }
 
+
 $(document).keydown((e) => {
     let c = e.which;
     if (c == 87) {              // w
@@ -274,6 +292,8 @@ $(document).keydown((e) => {
         truck.backward = true;
     } else if (c == 68) {       // d
         truck.right = true;
+    } else if (c == 32) {
+        fireProjectile();
     }
 });
 
@@ -306,31 +326,37 @@ let truck = new Truck(truckEntity);
 
 let deltaT = 0;
 let start = window.performance.now();
+let dt = 1 / TICKRATE;
 requestAnimationFrame(frame);
 
 /* Client-Server Communication */
 
-let CLIENT_ENTITIES = {};              // map from player's id to an actual entity
+let CLIENT_PLAYER_ENTITIES = {};                // map from player's id to an actual entity
+let CLIENT_PROJECTILE_ENTITIES = {};            // map from projectile's id to an actual entity
 
 let userId = ~~(Math.random() * 1000000000);   // userId is just a random number (for now)
 let socket = io();
 
-socket.on("serverRequestsClientData", () => {
-    socket.emit("serverReceivesClientData",
-        userId,
-        truck.entity.position._value,
-        truck.entity.orientation._value,
-        truck.health);
-});
+// socket.on("serverRequestsClientData", () => {
+//     socket.emit("serverReceivesClientData",
+//         userId,
+//         truck.entity.position._value,
+//         truck.entity.orientation._value,
+//         truck.health);
+// });
 
-socket.on("serverEmitsData", (PLAYERS_IN_SERVER) => {
+socket.on("serverEmitsData", (PLAYERS_IN_SERVER, PROJECTILES) => {
+    // update player positions
     for (let playerId in PLAYERS_IN_SERVER) {
-        if (playerId == userId) { continue; }
-        if (CLIENT_ENTITIES[playerId]) {
-            CLIENT_ENTITIES[playerId].position = PLAYERS_IN_SERVER[playerId].pos;
-            CLIENT_ENTITIES[playerId].orientation = PLAYERS_IN_SERVER[playerId].orientation;
+        if (playerId == userId) {
+            truck.health = PLAYERS_IN_SERVER[playerId].health;
+            continue;
+        }
+        if (CLIENT_PLAYER_ENTITIES[playerId]) {
+            CLIENT_PLAYER_ENTITIES[playerId].position = PLAYERS_IN_SERVER[playerId].pos;
+            CLIENT_PLAYER_ENTITIES[playerId].orientation = PLAYERS_IN_SERVER[playerId].orientation;
         } else {
-            CLIENT_ENTITIES[playerId] = viewer.entities.add({
+            CLIENT_PLAYER_ENTITIES[playerId] = viewer.entities.add({
                 name: "truck",
                 model: {
                     uri: TRUCK_MODEL_URL,
@@ -339,6 +365,23 @@ socket.on("serverEmitsData", (PLAYERS_IN_SERVER) => {
                 },
                 position: PLAYERS_IN_SERVER[playerId].pos,
                 orientation: PLAYERS_IN_SERVER[playerId].orientation
+            });
+        }
+    }
+
+    // update projectile positions
+    for (let projId in PROJECTILES) {
+        if (CLIENT_PROJECTILE_ENTITIES[projId]) {
+            CLIENT_PROJECTILE_ENTITIES[projId].position = PROJECTILES[projId].pos;
+        } else {
+            CLIENT_PROJECTILE_ENTITIES[projId] = viewer.entities.add({
+                name: "projectile",
+                model: {
+                    uri: PROJECTILE_MODEL_URL,
+                    scale: 1,
+                    runAnimations: false
+                },
+                position: CLIENT_PROJECTILE_ENTITIES[projId].pos
             });
         }
     }
