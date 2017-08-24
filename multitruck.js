@@ -392,6 +392,7 @@ socket.on("serverEmitsData", (PLAYERS_IN_SERVER, PROJECTILES, PROJ_TO_REMOVE) =>
     }
 
     // remove old projectiles
+    if (PROJ_TO_REMOVE.length > 0) { console.log("#toremove: " + PROJ_TO_REMOVE.length); }
     for (let i = 0; i < PROJ_TO_REMOVE.length; i++) {
         let id = PROJ_TO_REMOVE[i];
         if (CLIENT_PROJECTILE_ENTITIES[id]) {

@@ -122,15 +122,18 @@ io.on("connection", (socket) => {
         PROJECTILES[projectileCount] = new Projectile(projectileCount, pos, vel);
         projectileCount++;
     });
-    
-    function serverTick() {
-        // update projectiles
-        PROJECTILES_TO_REMOVE = [];
-        updateProjectiles();
-
-        // emit data
-        socket.emit("serverEmitsData", PLAYERS_IN_SERVER, PROJECTILES, PROJECTILES_TO_REMOVE);
-        setTimeout(serverTick, 16.6);
-    }
-    serverTick();
 });
+
+/**
+ * Main server loop. Performs calculations and emits data to all clients.
+ */
+function serverTick() {
+    // update projectiles
+    PROJECTILES_TO_REMOVE = [];
+    updateProjectiles();
+
+    // emit data
+    io.sockets.emit("serverEmitsData", PLAYERS_IN_SERVER, PROJECTILES, PROJECTILES_TO_REMOVE);
+    setTimeout(serverTick, 16.6);
+}
+serverTick();
