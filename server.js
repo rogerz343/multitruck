@@ -42,11 +42,12 @@ class Player {
  * collision detection is done only on the server.
  */
 class Projectile {
-    constructor(projectileId, position, velocity) {
+    constructor(projectileId, position, velocity, damage) {
         this.id = projectileId;
         this.initialPos = position;
         this.pos = position;
         this.vel = velocity;
+        this.damage = damage;
     }
 
     entityTick() {
@@ -71,8 +72,7 @@ function updateProjectiles() {
             for (let playerId in PLAYERS_IN_SERVER) {
                 let player = PLAYERS_IN_SERVER[playerId];
                 if (Cesium.Cartesian3.distance(projectile.pos, player.pos) <= 3) {
-                    console.log("remove because collided with player");
-                    player.health -= 10;
+                    player.health -= projectile.damage;
                     PROJECTILES_TO_REMOVE.push(projId);
                     delete PROJECTILES[projId];
                     break;
@@ -117,9 +117,9 @@ io.on("connection", (socket) => {
         }
     });
 
-    socket.on("addNewProjectile", (pos, vel) => {
+    socket.on("addNewProjectile", (pos, vel, damage) => {
         Cesium.Cartesian3.multiplyByScalar(vel, PROJECTILE_SPEED, vel);
-        PROJECTILES[projectileCount] = new Projectile(projectileCount, pos, vel);
+        PROJECTILES[projectileCount] = new Projectile(projectileCount, pos, vel, damage);
         projectileCount++;
     });
 });

@@ -4,10 +4,13 @@
  *          my orthonomral frame for the truck might be rotated 90 degrees relative to AGI's milktruck app's code
  */
 
-const TRUCK_MODEL_URL = "model/truck.gltf";
+const TRUCK_MODEL_URL = "resources/truck/truck.gltf";
+const TRUCK_DESTROYED_MODEL_URL = "resources/truck_destroyed/truck.gltf";
 const PROJECTILE_MODEL_URL = "resources/box/box.gltf";
 const TICKRATE = 60;
 const TICK_INTERVAL = 1000 / TICKRATE;
+
+const DEFAULT_DAMAGE = 10;
 
 const INITIAL_POS = Cesium.Cartesian3.fromDegrees(-77.413404, 43.203573);
 const INITIAL_ORIENT = Cesium.Transforms.headingPitchRollQuaternion(INITIAL_POS,
@@ -56,6 +59,8 @@ class Truck {
         this.backward = false;
         this.left = false;
         this.right = false;
+        this.damage = DEFAULT_DAMAGE;
+        this.destroyed = false;
     }
 
     driveTick() {
@@ -251,7 +256,13 @@ function estimateGroundNormal(pos) {
 }
 
 function updateHealthBar() {
-    $("#health-remaining").attr("width", (truck.health * 2));
+    if (truck.destroyed) { return; }
+    let remaining = Math.max(truck.health * 2, 0);
+    $("#health-remaining").width(remaining + "px");
+    if (remaining <= 0) {
+        truck.entity.model.uri = TRUCK_DESTROYED_MODEL_URL;
+        truck.destroyed = true;
+    }
 }
 
 function tick() {
@@ -260,8 +271,7 @@ function tick() {
     socket.emit("serverReceivesClientData",
         userId,
         truck.entity.position._value,
-        truck.entity.orientation._value,
-        truck.health);
+        truck.entity.orientation._value);
 }
 
 function fireProjectile() {
@@ -272,7 +282,7 @@ function fireProjectile() {
     let pos = Cesium.Cartesian3.add(truck.entity.position._value, deltaPos, new Cesium.Cartesian3());
     let posCarto = Cesium.Cartographic.fromCartesian(pos);
     pos = Cesium.Cartesian3.fromRadians(posCarto.longitude, posCarto.latitude, height);
-    socket.emit("addNewProjectile", pos, forwardDir);
+    socket.emit("addNewProjectile", pos, forwardDir, truck.damage);
 }
 
 function frame(timestamp) {
@@ -287,6 +297,7 @@ function frame(timestamp) {
 
 
 $(document).keydown((e) => {
+    if (truck.destroyed) { return; }
     let c = e.which;
     if (c == 87) {              // w
         truck.forward = true;
@@ -302,6 +313,7 @@ $(document).keydown((e) => {
 });
 
 $(document).keyup((e) => {
+    if (truck.destroyed) { return; }
     let c = e.which;
     if (c == 87) {              // w
         truck.forward = false;
@@ -359,6 +371,9 @@ socket.on("serverEmitsData", (PLAYERS_IN_SERVER, PROJECTILES, PROJ_TO_REMOVE) =>
         if (CLIENT_PLAYER_ENTITIES[playerId]) {
             CLIENT_PLAYER_ENTITIES[playerId].position = PLAYERS_IN_SERVER[playerId].pos;
             CLIENT_PLAYER_ENTITIES[playerId].orientation = PLAYERS_IN_SERVER[playerId].orientation;
+            if (PLAYERS_IN_SERVER[playerId].health <= 0) {
+                CLIENT_PLAYER_ENTITIES[playerId].model.uri = TRUCK_DESTROYED_MODEL_URL;
+            }
         } else {
             CLIENT_PLAYER_ENTITIES[playerId] = viewer.entities.add({
                 name: "truck",
@@ -396,10 +411,8 @@ socket.on("serverEmitsData", (PLAYERS_IN_SERVER, PROJECTILES, PROJ_TO_REMOVE) =>
     for (let i = 0; i < PROJ_TO_REMOVE.length; i++) {
         let id = PROJ_TO_REMOVE[i];
         if (CLIENT_PROJECTILE_ENTITIES[id]) {
-            console.log(CLIENT_PROJECTILE_ENTITIES);
             viewer.entities.remove(CLIENT_PROJECTILE_ENTITIES[id]);
             delete CLIENT_PROJECTILE_ENTITIES[id];
-            console.log(CLIENT_PROJECTILE_ENTITIES);
         }
     }
 });
