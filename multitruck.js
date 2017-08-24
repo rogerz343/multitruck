@@ -262,6 +262,7 @@ function updateHealthBar() {
     if (remaining <= 0) {
         truck.entity.model.uri = TRUCK_DESTROYED_MODEL_URL;
         truck.destroyed = true;
+        $("#wrecked-text").text("wrecked.");
     }
 }
 

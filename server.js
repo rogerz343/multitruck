@@ -19,7 +19,7 @@ http.listen(PORT, () => {
 
 /* Program Starts Here */
 
-const PROJECTILE_SPEED = 30;
+const PROJECTILE_SPEED = 80;
 let Cesium = require("cesium");
 
 

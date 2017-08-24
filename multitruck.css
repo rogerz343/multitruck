@@ -4,17 +4,30 @@ html, body, #cesium-container {
 
 #top-right {
     position: absolute;
-    top: 0px;
-    left: 0px;
+    top: 32px;
+    left: 32px;
 }
 
 #health-bar {
-
+    vertical-align: center;
 }
 
 #health-icon {
     width: 32px;
     height: 32px;
+}
+
+#health-num-wrap {
+    display: inline-block;
+}
+
+#health-num {
+    font-family: 'Roboto', sans-serif;
+    font-weight: bold;
+    font-size: 400%;
+    color: white;
+    margin-left: 4px;
+    margin-right: 4px;
 }
 
 #health-container {
@@ -28,5 +41,25 @@ html, body, #cesium-container {
 #health-remaining {
     height: 32px;
     width: 200px;
-    background-color: red;
+    background-color: #d0e0a7;
+}
+
+#wrecked-div {
+    height: 200px;
+    width: 512px;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    margin: auto;
+}
+
+#wrecked-text {
+    font-family: 'Roboto', sans-serif;
+    font-weight: bold;
+    font-size: 800%;
+    color: white;
+    opacity: .8;
+    text-align: center;
 }

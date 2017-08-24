@@ -2,13 +2,14 @@
 <html lang="en">
 <head>
     <title>
-        MultiTruck
+        Truck Battle
     </title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no">
     <link rel="icon" href="favicon.ico">
     <link rel="stylesheet" type="text/css" href="Cesium/Widgets/widgets.css">
     <link rel="stylesheet" type="text/css" href="multitruck.css">
+    <link href="https://fonts.googleapis.com/css?family=Roboto" rel="stylesheet">
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.3/socket.io.js"></script>
     <script src="Cesium/Cesium.js"></script>
@@ -18,11 +19,13 @@
     <div id="top-right">
         <div id="health-bar">
             <img id="health-icon" src="resources/health_icon.png">
+            <div id="health-num-wrap"><span id="health-num">100</span></div>
             <div id="health-container">
                 <div id="health-remaining"></div>
             </div>
         </div>
     </div>
+    <div id="wrecked-div"><span id="wrecked-text"></span></div>
     <script src="multitruck.js"></script>
 </body>
 </html>
