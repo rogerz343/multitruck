@@ -18,8 +18,6 @@ const MAX_FORWARD_SPEED = 100;
 const MAX_REVERSE_SPEED = 40;
 const GRAVITY = 9.8;
 
-const PROJECTILE_SPEED = 50;
-
 // leaving out next line will result in console warning
 Cesium.BingMapsApi.defaultKey = 'P9gVFeINebTgcj5ONynB~sa3kfugY4uM70j48aMFH-g~Ai2zw5GpzAt7hLyv87kHTaDy9dhktuwKhkBi8HyCOoaU5f1VrSm9-Ps4QEJQRuH8';
 let viewer = new Cesium.Viewer("cesium-container", {
@@ -267,10 +265,13 @@ function tick() {
 }
 
 function fireProjectile() {
-    // bullet should fire from middle of truck (about 1.5 meters off the ground);
-    let posCarto = Cesium.Cartographic.fromCartesian(truck.entity.position._value);
-    let pos = Cesium.Cartesian3.fromRadians(posCarto.longitude, posCarto.latitude, posCarto.height + 1.5);
+    // bullet should fire from front-middle of truck (about 1 meter in front and 1.5 meters off the ground);
+    let height = Cesium.Cartographic.fromCartesian(truck.entity.position._value).height + 1.5;
     let forwardDir = Cesium.Matrix3.getColumn(Cesium.Matrix3.fromQuaternion(truck.entity.orientation._value), 0, new Cesium.Cartesian3());
+    let deltaPos = Cesium.Cartesian3.multiplyByScalar(forwardDir, 3, new Cesium.Cartesian3());
+    let pos = Cesium.Cartesian3.add(truck.entity.position._value, deltaPos, new Cesium.Cartesian3());
+    let posCarto = Cesium.Cartographic.fromCartesian(pos);
+    pos = Cesium.Cartesian3.fromRadians(posCarto.longitude, posCarto.latitude, height);
     socket.emit("addNewProjectile", pos, forwardDir);
 }
 
@@ -348,7 +349,7 @@ let socket = io();
 //         truck.health);
 // });
 
-socket.on("serverEmitsData", (PLAYERS_IN_SERVER, PROJECTILES) => {
+socket.on("serverEmitsData", (PLAYERS_IN_SERVER, PROJECTILES, PROJ_TO_REMOVE) => {
     // update player positions
     for (let playerId in PLAYERS_IN_SERVER) {
         if (playerId == userId) {
@@ -387,6 +388,17 @@ socket.on("serverEmitsData", (PLAYERS_IN_SERVER, PROJECTILES) => {
                 position: PROJECTILES[projId].pos,
                 orientation: INITIAL_ORIENT
             });
+        }
+    }
+
+    // remove old projectiles
+    for (let i = 0; i < PROJ_TO_REMOVE.length; i++) {
+        let id = PROJ_TO_REMOVE[i];
+        if (CLIENT_PROJECTILE_ENTITIES[id]) {
+            console.log(CLIENT_PROJECTILE_ENTITIES);
+            viewer.entities.remove(CLIENT_PROJECTILE_ENTITIES[id]);
+            delete CLIENT_PROJECTILE_ENTITIES[id];
+            console.log(CLIENT_PROJECTILE_ENTITIES);
         }
     }
 });

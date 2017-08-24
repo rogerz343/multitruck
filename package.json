@@ -1,6 +1,6 @@
 {
-    "name": "MultiTruck",
-    "private": "true",
+    "name": "multitruck",
+    "private": true,
     "version": "1.0.0",
     "description": "server for multitruck",
     "main": "server.js",
