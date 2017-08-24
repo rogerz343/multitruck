@@ -19,6 +19,7 @@ html, body, #cesium-container {
 
 #health-num-wrap {
     display: inline-block;
+    width: 112px;
 }
 
 #health-num {
@@ -26,8 +27,6 @@ html, body, #cesium-container {
     font-weight: bold;
     font-size: 400%;
     color: white;
-    margin-left: 4px;
-    margin-right: 4px;
 }
 
 #health-container {

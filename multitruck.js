@@ -258,6 +258,7 @@ function estimateGroundNormal(pos) {
 function updateHealthBar() {
     if (truck.destroyed) { return; }
     let remaining = Math.max(truck.health * 2, 0);
+    $("#health-num").text(Math.floor(truck.health));
     $("#health-remaining").width(remaining + "px");
     if (remaining <= 0) {
         truck.entity.model.uri = TRUCK_DESTROYED_MODEL_URL;
