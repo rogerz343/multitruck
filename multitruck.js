@@ -12,12 +12,14 @@
 const TRUCK_MODEL_URL = "resources/truck/truck.gltf";
 const TRUCK_DESTROYED_MODEL_URL = "resources/truck_destroyed/truck.gltf";
 const PROJECTILE_MODEL_URL = "resources/box/box.gltf";
+const FIRE_URL = "resources/fire.png";
 const TICKRATE = 60;
 const TICK_INTERVAL = 1000 / TICKRATE;
 
 const DEFAULT_DAMAGE = 10;
 
-const INITIAL_POS = Cesium.Cartesian3.fromDegrees(-112.173774, 36.175399); //-77.413404, 43.203573);
+// const INITIAL_POS = Cesium.Cartesian3.fromDegrees(-112.173774, 36.175399);  // grand canyon
+const INITIAL_POS = Cesium.Cartesian3.fromDegrees(-77.413404, 43.203573);   // webster
 const INITIAL_ORIENT = Cesium.Transforms.headingPitchRollQuaternion(INITIAL_POS,
     new Cesium.HeadingPitchRoll(0, 0, 0));
 const FORWARD_ACCEL = 50;
@@ -57,6 +59,9 @@ viewer.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEF
  */
 class Truck {
     constructor(truckEntity) {
+        this.entity = truckEntity;
+        this.particles = null;
+
         this.health = 100;
         this.entity = truckEntity;
         this.vel = new Cesium.Cartesian3();
@@ -219,6 +224,12 @@ class Truck {
         this.cameraTick();
     }
 
+    particleTick() {
+        if (this.particles) {
+            this.particles.modelMatrix = computeModelMatrix(this.entity);
+        }
+    }
+
     cameraTick() {
         let hpr = Cesium.HeadingPitchRoll.fromQuaternion(this.entity.orientation._value);
         viewer.scene.camera.lookAt(this.entity.position._value,
@@ -271,13 +282,33 @@ function estimateGroundNormal(pos) {
     return normal;
 }
 
+/**
+ * Updates visual indications of truck's health (html/css, visible damage, etc.)
+ */
 function updateHealthBar() {
     if (truck.destroyed) { return; }
     let remaining = Math.max(truck.health * 2, 0);
     $("#health-num").text(Math.floor(truck.health));
     $("#health-remaining").width(remaining + "px");
-    if (remaining <= 0) {
+    if (truck.health <= 40) {
         truck.entity.model.uri = TRUCK_DESTROYED_MODEL_URL;
+        if (!truck.particles) {
+            truck.particles = viewer.scene.primitives.add(new Cesium.ParticleSystem({
+                image: FIRE_URL,
+                startScale: 1,
+                endScale: 4,
+                life: 1,
+                speed: 5,
+                width: 20,
+                height: 20,
+                rate: 10,
+                lifeTime: 16,
+                modelMatrix: computeModelMatrix(truck.entity),
+                emitterModelMatrix: computeEmitterModelMatrix()
+            }));
+        }
+    }
+    if (remaining <= 0) {
         truck.destroyed = true;
         $("#wrecked-text").text("wrecked.");
     }
@@ -285,6 +316,7 @@ function updateHealthBar() {
 
 function tick() {
     truck.driveTick();
+    truck.particleTick();
     updateHealthBar();
     socket.emit("serverReceivesClientData",
         userId,
@@ -301,6 +333,30 @@ function fireProjectile() {
     let posCarto = Cesium.Cartographic.fromCartesian(pos);
     pos = Cesium.Cartesian3.fromRadians(posCarto.longitude, posCarto.latitude, height);
     socket.emit("addNewProjectile", pos, forwardDir, truck.damage);
+}
+
+/**
+ * Computes the model matrix of the input entity
+ * @param {Cesium.Entity} entity the entity to compute the model matrix of
+ * @returns the modelMatrix of that entity
+ */
+function computeModelMatrix(entity) {
+    let pos = entity.position._value;
+    let rotation = Cesium.Matrix3.fromQuaternion(entity.orientation._value);
+    let modelMatrix = Cesium.Matrix4.fromRotationTranslation(rotation, pos, new Cesium.Matrix4());
+    return modelMatrix;
+}
+
+/**
+ * Computes an offset for a particle relative to an entity
+ * ex: puts fire particles on engine of truck instead of center of it
+ */
+function computeEmitterModelMatrix() {
+    let hpr = Cesium.HeadingPitchRoll.fromDegrees(0, 0, 0, new Cesium.HeadingPitchRoll);
+    let trs = new Cesium.TranslationRotationScale();
+    trs.translation = Cesium.Cartesian3.fromElements(2, 0, 1.5, new Cesium.Cartesian3());
+    trs.rotation = Cesium.Quaternion.fromHeadingPitchRoll(hpr, new Cesium.Quaternion());
+    return Cesium.Matrix4.fromTranslationRotationScale(trs, new Cesium.Matrix4());
 }
 
 function frame(timestamp) {
@@ -365,8 +421,9 @@ requestAnimationFrame(frame);
 
 /* Client-Server Communication */
 
-let CLIENT_PLAYER_ENTITIES = {};                // map from player's id to an actual entity
-let CLIENT_PROJECTILE_ENTITIES = {};            // map from projectile's id to an actual entity
+let clientPlayerEntities = {};              // map from player's id to an actual entity
+let clientParticleEntities = {};            // map from player's id to a Particle System
+let clientProjectilEntities = {};           // map from projectile's id to an actual entity
 
 let userId = ~~(Math.random() * 1000000000);   // userId is just a random number (for now)
 let socket = io();
@@ -378,14 +435,32 @@ socket.on("serverEmitsData", (PLAYERS_IN_SERVER, PROJECTILES, PROJ_TO_REMOVE) =>
             truck.health = PLAYERS_IN_SERVER[playerId].health;
             continue;
         }
-        if (CLIENT_PLAYER_ENTITIES[playerId]) {
-            CLIENT_PLAYER_ENTITIES[playerId].position = PLAYERS_IN_SERVER[playerId].pos;
-            CLIENT_PLAYER_ENTITIES[playerId].orientation = PLAYERS_IN_SERVER[playerId].orientation;
-            if (PLAYERS_IN_SERVER[playerId].health <= 0) {
-                CLIENT_PLAYER_ENTITIES[playerId].model.uri = TRUCK_DESTROYED_MODEL_URL;
+        if (clientPlayerEntities[playerId]) {
+            let playerEntity = clientPlayerEntities[playerId];
+            playerEntity.position = PLAYERS_IN_SERVER[playerId].pos;
+            playerEntity.orientation = PLAYERS_IN_SERVER[playerId].orientation;
+            if (PLAYERS_IN_SERVER[playerId].health <= 40) {
+                playerEntity.model.uri = TRUCK_DESTROYED_MODEL_URL;
+                if (clientParticleEntities[playerId]) {
+                    clientParticleEntities[playerId].modelMatrix = computeModelMatrix(playerEntity);
+                } else {
+                    clientParticleEntities[playerId] = viewer.scene.primitives.add(new Cesium.ParticleSystem({
+                        image: FIRE_URL,
+                        startScale: 1,
+                        endScale: 4,
+                        life: 1,
+                        speed: 5,
+                        width: 20,
+                        height: 20,
+                        rate: 10,
+                        lifeTime: 16,
+                        modelMatrix: computeModelMatrix(playerEntity),
+                        emitterModelMatrix: computeEmitterModelMatrix()
+                    }));
+                }
             }
         } else {
-            CLIENT_PLAYER_ENTITIES[playerId] = viewer.entities.add({
+            clientPlayerEntities[playerId] = viewer.entities.add({
                 name: "truck",
                 model: {
                     uri: TRUCK_MODEL_URL,
@@ -400,10 +475,10 @@ socket.on("serverEmitsData", (PLAYERS_IN_SERVER, PROJECTILES, PROJ_TO_REMOVE) =>
 
     // update projectile positions
     for (let projId in PROJECTILES) {
-        if (CLIENT_PROJECTILE_ENTITIES[projId]) {
-            CLIENT_PROJECTILE_ENTITIES[projId].position = PROJECTILES[projId].pos;
+        if (clientProjectilEntities[projId]) {
+            clientProjectilEntities[projId].position = PROJECTILES[projId].pos;
         } else {
-            CLIENT_PROJECTILE_ENTITIES[projId] = viewer.entities.add({
+            clientProjectilEntities[projId] = viewer.entities.add({
                 name: "projectile",
                 model: {
                     uri: PROJECTILE_MODEL_URL,
@@ -420,9 +495,9 @@ socket.on("serverEmitsData", (PLAYERS_IN_SERVER, PROJECTILES, PROJ_TO_REMOVE) =>
     if (PROJ_TO_REMOVE.length > 0) { console.log("#toremove: " + PROJ_TO_REMOVE.length); }
     for (let i = 0; i < PROJ_TO_REMOVE.length; i++) {
         let id = PROJ_TO_REMOVE[i];
-        if (CLIENT_PROJECTILE_ENTITIES[id]) {
-            viewer.entities.remove(CLIENT_PROJECTILE_ENTITIES[id]);
-            delete CLIENT_PROJECTILE_ENTITIES[id];
+        if (clientProjectilEntities[id]) {
+            viewer.entities.remove(clientProjectilEntities[id]);
+            delete clientProjectilEntities[id];
         }
     }
 });
