@@ -4,6 +4,11 @@
  *          my orthonomral frame for the truck might be rotated 90 degrees relative to AGI's milktruck app's code
  */
 
+/**
+ * great lesson: you need to normalize orthonormal vectors at every tick; otherwise,
+ * round-off errors and other errors will accumulate very quickly
+ */
+
 const TRUCK_MODEL_URL = "resources/truck/truck.gltf";
 const TRUCK_DESTROYED_MODEL_URL = "resources/truck_destroyed/truck.gltf";
 const PROJECTILE_MODEL_URL = "resources/box/box.gltf";
@@ -68,14 +73,20 @@ class Truck {
 
         let pos0 = entity.position._value;
         let pos0Carto = Cesium.Cartographic.fromCartesian(pos0);
-        let groundHeight = viewer.scene.globe.getHeight(pos0Carto);
+        let groundHeight = Cesium.defaultValue(viewer.scene.globe.getHeight(pos0Carto), 0);
         let speed = Cesium.Cartesian3.magnitude(this.vel);
 
         let isAirborne = pos0Carto.height - groundHeight > 0.3;
-        let orientationMatrix = Cesium.Matrix3.fromQuaternion(entity.orientation._value);
+        let orientationMatrix = Cesium.Matrix3.fromQuaternion(entity.orientation._value, new Cesium.Matrix3());
+        console.log(orientationMatrix);
         let forwardDir = Cesium.Matrix3.getColumn(orientationMatrix, 0, new Cesium.Cartesian3());
         let leftDir = Cesium.Matrix3.getColumn(orientationMatrix, 1, new Cesium.Cartesian3());
         let upDir = Cesium.Matrix3.getColumn(orientationMatrix, 2, new Cesium.Cartesian3());
+        if (Cesium.Cartesian3.magnitude(forwardDir) > 1.01 ||
+            Cesium.Cartesian3.magnitude(leftDir) > 1.01 ||
+            Cesium.Cartesian3.magnitude(upDir) > 1.01) {
+            console.log("STOP STOP STOP STOP STOP STOP STOP");
+        }
 
         let steerAngle = 0;
 
@@ -108,14 +119,16 @@ class Truck {
         // turn the car, update forward, left, and up orthonormal vectors
         forwardDir = isAirborne ? forwardDir : rotate(forwardDir, upDir, steerAngle);
         leftDir = Cesium.Cartesian3.cross(upDir, forwardDir, new Cesium.Cartesian3());
+        Cesium.Cartesian3.normalize(forwardDir, forwardDir);
+        Cesium.Cartesian3.normalize(leftDir, leftDir);
         Cesium.Matrix3.setColumn(orientationMatrix, 0, forwardDir, orientationMatrix);
         Cesium.Matrix3.setColumn(orientationMatrix, 1, leftDir, orientationMatrix);
-        entity.orientation = Cesium.Quaternion.fromRotationMatrix(orientationMatrix);
+        // entity.orientation = Cesium.Quaternion.fromRotationMatrix(orientationMatrix);
 
         // calculate forward speed
         let forwardSpeed = 0;
         if (!isAirborne) {
-            // if slipping sideways, transfer some of the slip velocity into forward velocity
+            // dampen sideways slip
             let slipMagnitude = Cesium.Cartesian3.dot(this.vel, leftDir);
             let c0 = Math.exp(-dt / 0.5);
             let slipVector = Cesium.Cartesian3.multiplyByScalar(leftDir, slipMagnitude * (1 - c0), new Cesium.Cartesian3());
@@ -142,7 +155,7 @@ class Truck {
             let drag = speed * speed * DRAG_FACTOR;
 
             // extra constant drag to make sure truck eventually stops
-            let CONSTANT_DRAG = 2.0;
+            let CONSTANT_DRAG = 1.5;
             drag += CONSTANT_DRAG;
 
             if (drag > speed) {
@@ -164,13 +177,11 @@ class Truck {
 
         // check that we're not underground
         let pos1Carto = Cesium.Cartographic.fromCartesian(pos1);
-        groundHeight = viewer.scene.globe.getHeight(pos1Carto);
-        if (groundHeight != undefined && !isNaN(groundHeight) && pos1Carto.height < groundHeight) {
+        groundHeight = Cesium.defaultValue(viewer.scene.globe.getHeight(pos1Carto), 0);
+        if (pos1Carto.height < groundHeight) {
             pos1 = Cesium.Cartesian3.fromRadians(pos1Carto.longitude, pos1Carto.latitude, groundHeight);
             pos1Carto.height = groundHeight;
         }
-
-        entity.position = pos1;
 
         // cancel velocity into ground
         if (!isAirborne) {
@@ -181,23 +192,31 @@ class Truck {
                 Cesium.Cartesian3.add(this.vel, cancel, this.vel);
             }
 
-            // make orientation match ground
-            let c0 = Math.exp(-dt / 0.25);
-            let c1 = 1 - c0;
-            let scaledUp = Cesium.Cartesian3.multiplyByScalar(upDir, c0, new Cesium.Cartesian3());
-            let scaledNormal = Cesium.Cartesian3.multiplyByScalar(groundNormal, c1, new Cesium.Cartesian3());
-            let blendedUp = Cesium.Cartesian3.add(scaledUp, scaledNormal, new Cesium.Cartesian3());
-            Cesium.Cartesian3.normalize(blendedUp, blendedUp);
+            // // make orientation match ground
+            // let c0 = Math.exp(-dt / 0.25);
+            // let c1 = 1 - c0;
+            // let scaledUp = Cesium.Cartesian3.multiplyByScalar(upDir, c0, new Cesium.Cartesian3());
+            // let scaledNormal = Cesium.Cartesian3.multiplyByScalar(groundNormal, c1, new Cesium.Cartesian3());
+            // let blendedUp = Cesium.Cartesian3.add(scaledUp, scaledNormal, new Cesium.Cartesian3());
+            // Cesium.Cartesian3.normalize(blendedUp, blendedUp);
 
-            let newLeft = Cesium.Cartesian3.cross(blendedUp, forwardDir, new Cesium.Cartesian3());
-            Cesium.Matrix3.setColumn(orientationMatrix, 1, newLeft, orientationMatrix);
-            Cesium.Matrix3.setColumn(orientationMatrix, 2, blendedUp, orientationMatrix);
-
-            forwardDir = Cesium.Matrix3.getColumn(orientationMatrix, 0, new Cesium.Cartesian3());
-            leftDir = Cesium.Matrix3.getColumn(orientationMatrix, 1, new Cesium.Cartesian3());
-            upDir = Cesium.Matrix3.getColumn(orientationMatrix, 2, new Cesium.Cartesian3());
+            // // make sure vectors are orthonormal
+            // console.log("----------");
+            // console.log(leftDir);
+            // console.log(blendedUp);
+            // let newForward = Cesium.Cartesian3.cross(leftDir, blendedUp, new Cesium.Cartesian3());
+            // let newLeft = Cesium.Cartesian3.cross(blendedUp, newForward, new Cesium.Cartesian3());
+            // let newUp = Cesium.Cartesian3.cross(newForward, newLeft, new Cesium.Cartesian3());
+            // console.log("..........");
+            // console.log(newForward);
+            // console.log(newLeft);
+            // console.log(newUp);
+            // Cesium.Matrix3.setColumn(orientationMatrix, 0, newForward, orientationMatrix);
+            // Cesium.Matrix3.setColumn(orientationMatrix, 1, newLeft, orientationMatrix);
+            // Cesium.Matrix3.setColumn(orientationMatrix, 2, newUp, orientationMatrix);
         }
 
+        entity.position = pos1;
         entity.orientation = Cesium.Quaternion.fromRotationMatrix(orientationMatrix);
         
         this.cameraTick();
@@ -241,10 +260,10 @@ function estimateGroundNormal(pos) {
     let pos2 = Cesium.Cartesian3.add(pos, north, new Cesium.Cartesian3());
     let pos3 = Cesium.Cartesian3.subtract(pos, north, new Cesium.Cartesian3());
 
-    let h0 = Cesium.Cartographic.fromCartesian(pos0).height;
-    let h1 = Cesium.Cartographic.fromCartesian(pos1).height;
-    let h2 = Cesium.Cartographic.fromCartesian(pos2).height;
-    let h3 = Cesium.Cartographic.fromCartesian(pos3).height;
+    let h0 = Cesium.defaultValue(Cesium.Cartographic.fromCartesian(pos0).height, 0);
+    let h1 = Cesium.defaultValue(Cesium.Cartographic.fromCartesian(pos1).height, 0);
+    let h2 = Cesium.defaultValue(Cesium.Cartographic.fromCartesian(pos2).height, 0);
+    let h3 = Cesium.defaultValue(Cesium.Cartographic.fromCartesian(pos3).height, 0);
 
     let dx = h1 - h0;
     let dy = h3 - h2;
@@ -354,14 +373,6 @@ let CLIENT_PROJECTILE_ENTITIES = {};            // map from projectile's id to a
 
 let userId = ~~(Math.random() * 1000000000);   // userId is just a random number (for now)
 let socket = io();
-
-// socket.on("serverRequestsClientData", () => {
-//     socket.emit("serverReceivesClientData",
-//         userId,
-//         truck.entity.position._value,
-//         truck.entity.orientation._value,
-//         truck.health);
-// });
 
 socket.on("serverEmitsData", (PLAYERS_IN_SERVER, PROJECTILES, PROJ_TO_REMOVE) => {
     // update player positions
