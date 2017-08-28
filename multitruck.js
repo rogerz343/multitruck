@@ -24,7 +24,7 @@ const FORWARD_ACCEL = 50;
 const BACKWARD_ACCEL = 80;
 const MAX_FORWARD_SPEED = 100;
 const MAX_REVERSE_SPEED = 40;
-const GRAVITY = 9.8;
+const GRAVITY = 30; // 9.8 makes the truck take too long to fall
 
 // leaving out next line will result in console warning
 Cesium.BingMapsApi.defaultKey = 'P9gVFeINebTgcj5ONynB~sa3kfugY4uM70j48aMFH-g~Ai2zw5GpzAt7hLyv87kHTaDy9dhktuwKhkBi8HyCOoaU5f1VrSm9-Ps4QEJQRuH8';
@@ -191,10 +191,10 @@ class Truck {
                 Cesium.Cartesian3.add(this.vel, cancel, this.vel);
             }
 
-            // TODO: fix this part (make orientation match ground)
-
             // make orientation match ground
-            let c0 = 0.5; // 0.9355319;         // c0 = Math.exp(-dt / 0.25);
+            // c0 := "what percent of my new upDir should match my original upDir in this tick"
+            // c1 := "what percent of my new upDir should match the groundNormal in this tick"
+            let c0 = 0.9;
             let c1 = 1 - c0;
             let scaledUp = Cesium.Cartesian3.multiplyByScalar(upDir, c0, new Cesium.Cartesian3());
             let scaledNormal = Cesium.Cartesian3.multiplyByScalar(groundNormal, c1, new Cesium.Cartesian3());
@@ -203,10 +203,10 @@ class Truck {
 
             // make sure vectors are orthonormal
             let newForward = Cesium.Cartesian3.cross(leftDir, blendedUp, new Cesium.Cartesian3());
-            let newLeft = Cesium.Cartesian3.cross(blendedUp, newForward, new Cesium.Cartesian3());
-            let newUp = Cesium.Cartesian3.cross(newForward, newLeft, new Cesium.Cartesian3());
             Cesium.Cartesian3.normalize(newForward, newForward);
+            let newLeft = Cesium.Cartesian3.cross(blendedUp, newForward, new Cesium.Cartesian3());
             Cesium.Cartesian3.normalize(newLeft, newLeft);
+            let newUp = Cesium.Cartesian3.cross(newForward, newLeft, new Cesium.Cartesian3());
             Cesium.Cartesian3.normalize(newUp, newUp);
             Cesium.Matrix3.setColumn(orientationMatrix, 0, newForward, orientationMatrix);
             Cesium.Matrix3.setColumn(orientationMatrix, 1, newLeft, orientationMatrix);
@@ -257,10 +257,10 @@ function estimateGroundNormal(pos) {
     let pos2 = Cesium.Cartesian3.add(pos, north, new Cesium.Cartesian3());
     let pos3 = Cesium.Cartesian3.subtract(pos, north, new Cesium.Cartesian3());
 
-    let h0 = Cesium.defaultValue(Cesium.Cartographic.fromCartesian(pos0).height, 0);
-    let h1 = Cesium.defaultValue(Cesium.Cartographic.fromCartesian(pos1).height, 0);
-    let h2 = Cesium.defaultValue(Cesium.Cartographic.fromCartesian(pos2).height, 0);
-    let h3 = Cesium.defaultValue(Cesium.Cartographic.fromCartesian(pos3).height, 0);
+    let h0 = Cesium.defaultValue(globe.getHeight(Cesium.Cartographic.fromCartesian(pos0)), 0);
+    let h1 = Cesium.defaultValue(globe.getHeight(Cesium.Cartographic.fromCartesian(pos1)), 0);
+    let h2 = Cesium.defaultValue(globe.getHeight(Cesium.Cartographic.fromCartesian(pos2)), 0);
+    let h3 = Cesium.defaultValue(globe.getHeight(Cesium.Cartographic.fromCartesian(pos3)), 0);
 
     let dx = h1 - h0;
     let dy = h3 - h2;
