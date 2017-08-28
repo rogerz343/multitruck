@@ -17,7 +17,7 @@ const TICK_INTERVAL = 1000 / TICKRATE;
 
 const DEFAULT_DAMAGE = 10;
 
-const INITIAL_POS = Cesium.Cartesian3.fromDegrees(-77.413404, 43.203573);
+const INITIAL_POS = Cesium.Cartesian3.fromDegrees(-112.173774, 36.175399); //-77.413404, 43.203573);
 const INITIAL_ORIENT = Cesium.Transforms.headingPitchRollQuaternion(INITIAL_POS,
     new Cesium.HeadingPitchRoll(0, 0, 0));
 const FORWARD_ACCEL = 50;
@@ -78,7 +78,6 @@ class Truck {
 
         let isAirborne = pos0Carto.height - groundHeight > 0.3;
         let orientationMatrix = Cesium.Matrix3.fromQuaternion(entity.orientation._value, new Cesium.Matrix3());
-        console.log(orientationMatrix);
         let forwardDir = Cesium.Matrix3.getColumn(orientationMatrix, 0, new Cesium.Cartesian3());
         let leftDir = Cesium.Matrix3.getColumn(orientationMatrix, 1, new Cesium.Cartesian3());
         let upDir = Cesium.Matrix3.getColumn(orientationMatrix, 2, new Cesium.Cartesian3());
@@ -192,28 +191,26 @@ class Truck {
                 Cesium.Cartesian3.add(this.vel, cancel, this.vel);
             }
 
-            // // make orientation match ground
-            // let c0 = Math.exp(-dt / 0.25);
-            // let c1 = 1 - c0;
-            // let scaledUp = Cesium.Cartesian3.multiplyByScalar(upDir, c0, new Cesium.Cartesian3());
-            // let scaledNormal = Cesium.Cartesian3.multiplyByScalar(groundNormal, c1, new Cesium.Cartesian3());
-            // let blendedUp = Cesium.Cartesian3.add(scaledUp, scaledNormal, new Cesium.Cartesian3());
-            // Cesium.Cartesian3.normalize(blendedUp, blendedUp);
+            // TODO: fix this part (make orientation match ground)
 
-            // // make sure vectors are orthonormal
-            // console.log("----------");
-            // console.log(leftDir);
-            // console.log(blendedUp);
-            // let newForward = Cesium.Cartesian3.cross(leftDir, blendedUp, new Cesium.Cartesian3());
-            // let newLeft = Cesium.Cartesian3.cross(blendedUp, newForward, new Cesium.Cartesian3());
-            // let newUp = Cesium.Cartesian3.cross(newForward, newLeft, new Cesium.Cartesian3());
-            // console.log("..........");
-            // console.log(newForward);
-            // console.log(newLeft);
-            // console.log(newUp);
-            // Cesium.Matrix3.setColumn(orientationMatrix, 0, newForward, orientationMatrix);
-            // Cesium.Matrix3.setColumn(orientationMatrix, 1, newLeft, orientationMatrix);
-            // Cesium.Matrix3.setColumn(orientationMatrix, 2, newUp, orientationMatrix);
+            // make orientation match ground
+            let c0 = 0.5; // 0.9355319;         // c0 = Math.exp(-dt / 0.25);
+            let c1 = 1 - c0;
+            let scaledUp = Cesium.Cartesian3.multiplyByScalar(upDir, c0, new Cesium.Cartesian3());
+            let scaledNormal = Cesium.Cartesian3.multiplyByScalar(groundNormal, c1, new Cesium.Cartesian3());
+            let blendedUp = Cesium.Cartesian3.add(scaledUp, scaledNormal, new Cesium.Cartesian3());
+            Cesium.Cartesian3.normalize(blendedUp, blendedUp);
+
+            // make sure vectors are orthonormal
+            let newForward = Cesium.Cartesian3.cross(leftDir, blendedUp, new Cesium.Cartesian3());
+            let newLeft = Cesium.Cartesian3.cross(blendedUp, newForward, new Cesium.Cartesian3());
+            let newUp = Cesium.Cartesian3.cross(newForward, newLeft, new Cesium.Cartesian3());
+            Cesium.Cartesian3.normalize(newForward, newForward);
+            Cesium.Cartesian3.normalize(newLeft, newLeft);
+            Cesium.Cartesian3.normalize(newUp, newUp);
+            Cesium.Matrix3.setColumn(orientationMatrix, 0, newForward, orientationMatrix);
+            Cesium.Matrix3.setColumn(orientationMatrix, 1, newLeft, orientationMatrix);
+            Cesium.Matrix3.setColumn(orientationMatrix, 2, newUp, orientationMatrix);
         }
 
         entity.position = pos1;
