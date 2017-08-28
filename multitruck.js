@@ -13,6 +13,7 @@ const TRUCK_MODEL_URL = "resources/truck/truck.gltf";
 const TRUCK_DESTROYED_MODEL_URL = "resources/truck_destroyed/truck.gltf";
 const PROJECTILE_MODEL_URL = "resources/box/box.gltf";
 const FIRE_URL = "resources/fire.png";
+const SMOKE_URL = "resources/smoke.png";
 const TICKRATE = 60;
 const TICK_INTERVAL = 1000 / TICKRATE;
 
@@ -60,7 +61,8 @@ viewer.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEF
 class Truck {
     constructor(truckEntity) {
         this.entity = truckEntity;
-        this.particles = null;
+        this.fireParticles = null;
+        this.smokeParticles = null;
 
         this.health = 100;
         this.entity = truckEntity;
@@ -225,8 +227,10 @@ class Truck {
     }
 
     particleTick() {
-        if (this.particles) {
-            this.particles.modelMatrix = computeModelMatrix(this.entity);
+        if (this.fireParticles) {
+            let matrix = computeModelMatrix(this.entity);
+            this.fireParticles.modelMatrix = matrix;
+            this.smokeParticles.modelMatrix = matrix;
         }
     }
 
@@ -292,9 +296,22 @@ function updateHealthBar() {
     $("#health-remaining").width(remaining + "px");
     if (truck.health <= 40) {
         truck.entity.model.uri = TRUCK_DESTROYED_MODEL_URL;
-        if (!truck.particles) {
-            truck.particles = viewer.scene.primitives.add(new Cesium.ParticleSystem({
+        if (!truck.fireParticles) {
+            truck.fireParticles = viewer.scene.primitives.add(new Cesium.ParticleSystem({
                 image: FIRE_URL,
+                startScale: 1,
+                endScale: 4,
+                life: 1,
+                speed: 5,
+                width: 20,
+                height: 20,
+                rate: 10,
+                lifeTime: 16,
+                modelMatrix: computeModelMatrix(truck.entity),
+                emitterModelMatrix: computeEmitterModelMatrix()
+            }));
+            truck.smokeParticles = viewer.scene.primitives.add(new Cesium.ParticleSystem({
+                image: SMOKE_URL,
                 startScale: 1,
                 endScale: 4,
                 life: 1,
@@ -308,15 +325,52 @@ function updateHealthBar() {
             }));
         }
     }
-    if (remaining <= 0) {
+    if (truck.health <= 0) {
         truck.destroyed = true;
+        viewer.scene.primitives.add(new Cesium.ParticleSystem({
+            image: FIRE_URL,
+            startScale: 1,
+            endScale: 4,
+            startColor: Cesium.Color.RED.withAlpha(0.7),
+            endColor: Cesium.Color.YELLOW.withAlpha(0.3),
+            life: 0.5,
+            speed: 20,
+            width: 20,
+            height: 20,
+            rate: 200,
+            lifeTime: 1,
+            loop: false,
+            modelMatrix: computeModelMatrix(truck.entity),
+            emitterModelMatrix: computeEmitterModelMatrix(),
+            emitter: new Cesium.SphereEmitter(1.0)
+        }));
+        viewer.scene.primitives.add(new Cesium.ParticleSystem({
+            image: SMOKE_URL,
+            startScale: 1,
+            endScale: 4,
+            life: 0.5,
+            speed: 20,
+            width: 20,
+            height: 20,
+            rate: 200,
+            lifeTime: 1,
+            loop: false,
+            modelMatrix: computeModelMatrix(truck.entity),
+            emitterModelMatrix: computeEmitterModelMatrix(),
+            emitter: new Cesium.SphereEmitter(1.0)
+        }));
+        viewer.entities.remove(truck.entity);
+        viewer.scene.primitives.remove(truck.fireParticles);
+        viewer.scene.primitives.remove(truck.smokeParticles);
         $("#wrecked-text").text("wrecked.");
     }
 }
 
 function tick() {
-    truck.driveTick();
-    truck.particleTick();
+    if (!truck.destroyed) {
+        truck.driveTick();
+        truck.particleTick();
+    }
     updateHealthBar();
     socket.emit("serverReceivesClientData",
         userId,
@@ -422,8 +476,9 @@ requestAnimationFrame(frame);
 /* Client-Server Communication */
 
 let clientPlayerEntities = {};              // map from player's id to an actual entity
-let clientParticleEntities = {};            // map from player's id to a Particle System
-let clientProjectilEntities = {};           // map from projectile's id to an actual entity
+let clientFireParticles = {};               // map from player's id to a Particle System of fire
+let clientSmokeParticles = {};              // map from player's id to a Particle System of smoke
+let clientProjectileEntities = {};          // map from projectile's id to an actual entity
 
 let userId = ~~(Math.random() * 1000000000);   // userId is just a random number (for now)
 let socket = io();
@@ -441,11 +496,26 @@ socket.on("serverEmitsData", (PLAYERS_IN_SERVER, PROJECTILES, PROJ_TO_REMOVE) =>
             playerEntity.orientation = PLAYERS_IN_SERVER[playerId].orientation;
             if (PLAYERS_IN_SERVER[playerId].health <= 40) {
                 playerEntity.model.uri = TRUCK_DESTROYED_MODEL_URL;
-                if (clientParticleEntities[playerId]) {
-                    clientParticleEntities[playerId].modelMatrix = computeModelMatrix(playerEntity);
+                if (clientFireParticles[playerId]) {
+                    let matrix = computeModelMatrix(playerEntity);
+                    clientFireParticles[playerId].modelMatrix = matrix;
+                    clientSmokeParticles[playerId].modelMatrix = matrix;
                 } else {
-                    clientParticleEntities[playerId] = viewer.scene.primitives.add(new Cesium.ParticleSystem({
+                    clientFireParticles[playerId] = viewer.scene.primitives.add(new Cesium.ParticleSystem({
                         image: FIRE_URL,
+                        startScale: 1,
+                        endScale: 4,
+                        life: 1,
+                        speed: 5,
+                        width: 20,
+                        height: 20,
+                        rate: 10,
+                        lifeTime: 16,
+                        modelMatrix: computeModelMatrix(playerEntity),
+                        emitterModelMatrix: computeEmitterModelMatrix()
+                    }));
+                    clientSmokeParticles[playerId] = viewer.scene.primitives.add(new Cesium.ParticleSystem({
+                        image: SMOKE_URL,
                         startScale: 1,
                         endScale: 4,
                         life: 1,
@@ -475,10 +545,10 @@ socket.on("serverEmitsData", (PLAYERS_IN_SERVER, PROJECTILES, PROJ_TO_REMOVE) =>
 
     // update projectile positions
     for (let projId in PROJECTILES) {
-        if (clientProjectilEntities[projId]) {
-            clientProjectilEntities[projId].position = PROJECTILES[projId].pos;
+        if (clientProjectileEntities[projId]) {
+            clientProjectileEntities[projId].position = PROJECTILES[projId].pos;
         } else {
-            clientProjectilEntities[projId] = viewer.entities.add({
+            clientProjectileEntities[projId] = viewer.entities.add({
                 name: "projectile",
                 model: {
                     uri: PROJECTILE_MODEL_URL,
@@ -495,9 +565,9 @@ socket.on("serverEmitsData", (PLAYERS_IN_SERVER, PROJECTILES, PROJ_TO_REMOVE) =>
     if (PROJ_TO_REMOVE.length > 0) { console.log("#toremove: " + PROJ_TO_REMOVE.length); }
     for (let i = 0; i < PROJ_TO_REMOVE.length; i++) {
         let id = PROJ_TO_REMOVE[i];
-        if (clientProjectilEntities[id]) {
-            viewer.entities.remove(clientProjectilEntities[id]);
-            delete clientProjectilEntities[id];
+        if (clientProjectileEntities[id]) {
+            viewer.entities.remove(clientProjectileEntities[id]);
+            delete clientProjectileEntities[id];
         }
     }
 });
