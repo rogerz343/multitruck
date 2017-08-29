@@ -327,6 +327,7 @@ function updateHealthBar() {
     }
     if (truck.health <= 0) {
         truck.destroyed = true;
+        let matrix = computeModelMatrix(truck.entity);
         viewer.scene.primitives.add(new Cesium.ParticleSystem({
             image: FIRE_URL,
             startScale: 1,
@@ -340,7 +341,7 @@ function updateHealthBar() {
             rate: 200,
             lifeTime: 1,
             loop: false,
-            modelMatrix: computeModelMatrix(truck.entity),
+            modelMatrix: matrix,
             emitterModelMatrix: computeEmitterModelMatrix(),
             emitter: new Cesium.SphereEmitter(1.0)
         }));
@@ -355,7 +356,7 @@ function updateHealthBar() {
             rate: 200,
             lifeTime: 1,
             loop: false,
-            modelMatrix: computeModelMatrix(truck.entity),
+            modelMatrix: matrix,
             emitterModelMatrix: computeEmitterModelMatrix(),
             emitter: new Cesium.SphereEmitter(1.0)
         }));
@@ -363,6 +364,7 @@ function updateHealthBar() {
         viewer.scene.primitives.remove(truck.fireParticles);
         viewer.scene.primitives.remove(truck.smokeParticles);
         $("#wrecked-text").text("wrecked.");
+        socket.emit("clientDestroyed", userId);
     }
 }
 
@@ -562,7 +564,6 @@ socket.on("serverEmitsData", (PLAYERS_IN_SERVER, PROJECTILES, PROJ_TO_REMOVE) =>
     }
 
     // remove old projectiles
-    if (PROJ_TO_REMOVE.length > 0) { console.log("#toremove: " + PROJ_TO_REMOVE.length); }
     for (let i = 0; i < PROJ_TO_REMOVE.length; i++) {
         let id = PROJ_TO_REMOVE[i];
         if (clientProjectileEntities[id]) {
@@ -570,6 +571,61 @@ socket.on("serverEmitsData", (PLAYERS_IN_SERVER, PROJECTILES, PROJ_TO_REMOVE) =>
             delete clientProjectileEntities[id];
         }
     }
+});
+
+/**
+ * note: we needed to add a "special event" for when a player is destroyed
+ * because when a player is destroyed, they are immediately deleted from the
+ * server. Thus, we need a separate way to inform everyone that it is destroyed;
+ */
+socket.on("playerDestroyed", (playerId) => {
+    if (playerId == userId) {
+        truck.health = 0;
+        return;
+    }
+    if (!clientPlayerEntities[playerId]) { return; }
+    let playerEntity = clientPlayerEntities[playerId];
+    let matrix = computeModelMatrix(playerEntity);
+    let tempFire = viewer.scene.primitives.add(new Cesium.ParticleSystem({
+        image: FIRE_URL,
+        startScale: 1,
+        endScale: 4,
+        startColor: Cesium.Color.RED.withAlpha(0.7),
+        endColor: Cesium.Color.YELLOW.withAlpha(0.3),
+        life: 0.5,
+        speed: 20,
+        width: 20,
+        height: 20,
+        rate: 200,
+        lifeTime: 1,
+        loop: false,
+        modelMatrix: matrix,
+        emitterModelMatrix: computeEmitterModelMatrix(),
+        emitter: new Cesium.SphereEmitter(1.0)
+    }));
+    let tempSmoke = viewer.scene.primitives.add(new Cesium.ParticleSystem({
+        image: SMOKE_URL,
+        startScale: 1,
+        endScale: 4,
+        life: 0.5,
+        speed: 20,
+        width: 20,
+        height: 20,
+        rate: 200,
+        lifeTime: 1,
+        loop: false,
+        modelMatrix: matrix,
+        emitterModelMatrix: computeEmitterModelMatrix(),
+        emitter: new Cesium.SphereEmitter(1.0)
+    }));
+    viewer.entities.remove(playerEntity);
+    viewer.scene.primitives.remove(clientFireParticles[playerId]);
+    viewer.scene.primitives.remove(clientSmokeParticles[playerId]);
+    tempFire.complete = () => { console.log("event fired"); }
+    tempSmoke.complete = () => { console.log("event fired 2"); }
+    delete clientPlayerEntities[playerId];
+    delete clientFireParticles[playerId];
+    delete clientSmokeParticles[playerId];
 });
 
 socket.emit("playerConnect",

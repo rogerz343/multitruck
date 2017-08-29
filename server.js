@@ -73,6 +73,10 @@ function updateProjectiles() {
                 let player = PLAYERS_IN_SERVER[playerId];
                 if (Cesium.Cartesian3.distance(projectile.pos, player.pos) <= 3) {
                     player.health -= projectile.damage;
+                    if (player.health <= 0) {
+                        delete PLAYERS_IN_SERVER[playerId];
+                        io.sockets.emit("playerDestroyed", playerId);   // global broadcast
+                    }
                     PROJECTILES_TO_REMOVE.push(projId);
                     delete PROJECTILES[projId];
                     break;
