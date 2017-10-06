@@ -1,7 +1,6 @@
 /**
  * Client-side driving code for MultiTruck.
- * Credits: physics/driving mechanics adapted from: https://github.com/AnalyticalGraphicsInc/cesium-google-earth-examples
- *          my orthonomral frame for the truck might be rotated 90 degrees relative to AGI's milktruck app's code
+ * Credits: physics/driving mechanics adapted from AGI's "Monster Milktruck" demo
  */
 
 /**
@@ -364,6 +363,7 @@ function updateHealthBar() {
         viewer.scene.primitives.remove(truck.fireParticles);
         viewer.scene.primitives.remove(truck.smokeParticles);
         $("#wrecked-text").text("wrecked.");
+        $("#wrecked-message").text("(reload page to try again)");
         socket.emit("clientDestroyed", userId);
     }
 }

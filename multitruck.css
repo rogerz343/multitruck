@@ -62,3 +62,12 @@ html, body, #cesium-container {
     opacity: .8;
     text-align: center;
 }
+
+#wrecked-message {
+    font-family: 'Roboto', sans-serif;
+    font-weight: bold;
+    font-size: 100%;
+    color: white;
+    opacity: .8;
+    text-align: center;
+}
